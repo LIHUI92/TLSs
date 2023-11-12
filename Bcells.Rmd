@@ -1,0 +1,1072 @@
+---
+title: "Immune Infiltrates; Immune Genes DEGs"
+output:
+  pdf_document: default
+  html_document: default
+---
+          
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+
+## Fig.1
+
+```{r}
+library(xlsx)
+library("survival")
+library("survminer")
+library(plyr)
+library(patchwork)
+
+cli.1 <- read.xlsx("D:/Bcells/Bcells/clinical data/discovery cohort.xls",sheetIndex = 2, row.names = TRUE, header = TRUE)
+
+fit.1 <- survfit(Surv(OS_time, OS_event) ~ TLS_posi, data = cli.1)
+
+### fig 1C
+ggsurvplot(fit.1, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#26496d", "#8a4048"),
+           break.x.by=12)
+
+cli.2 <- read.xlsx("D:/Bcells/Bcells/clinical data/validation cohort 1.xls",sheetIndex = 2, row.names = TRUE, header = TRUE)
+
+fit.2 <- survfit(Surv(OStime, OS) ~ TLS, data = cli.2)
+
+### fig 1D
+ggsurvplot(fit.2, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#26496d", "#8a4048"),
+           break.x.by=12)
+
+
+
+```
+
+
+## Fig.2 
+
+
+```{r}
+
+library(ggpubr)
+library(reshape2)
+library(ggplot2)
+library(MCPcounter)
+library(genefilter)
+library(GSVA)
+library(Biobase)
+library(stringr)
+library(limma)
+library(clusterProfiler)
+library(xlsx)
+library(pheatmap)
+
+metadata <- read.xlsx("D:/Bcells/Bcells/clinical data/validation cohort 1.xls",sheetIndex = 2, row.names = TRUE, header = TRUE)
+metadata1 <- subset(metadata, TLSgroup != "")
+
+gene <- read.csv("D:/Bcells/Bcells/ngs data/gene_exp_cohort 1.csv",header = T, sep = ',', row.names = 1, check.names=F)
+gene1 <- gene[,metadata1$PtID]
+
+## MCPcounter免疫浸润
+
+# probesets=read.table("D:/Bcells/Bcells/probesets.txt",sep="\t",stringsAsFactors=FALSE,colClasses="character")
+# 
+# genes=read.table("D:/Bcells/Bcells/genes.txt",sep="\t",stringsAsFactors=FALSE,header=TRUE,colClasses="character",check.names=FALSE)
+# 
+# 
+# data <- MCPcounter.estimate(gene1,featuresType=c("affy133P2_probesets","HUGO_symbols","ENTREZ_ID")[2],probesets=probesets,genes=genes)
+# 
+# data1 <- as.data.frame(t(data))
+# data1$groups <- as.factor(metadata1$TLSgroup)
+# data2 <- melt(data1, id.vars = c("groups"))
+# 
+# my_comparisons <- list(c("TLS=0", "TLS≥1"))
+# col2<- c("#0167b9", "#f59701")
+# 
+# ggplot(data=data2, aes(x = groups, y = value, group=groups)) +
+#     geom_boxplot(aes(x=groups, fill=groups), notch=FALSE) +
+#     stat_summary(aes(x=groups), fun.y=mean, geom="point") +
+#     geom_jitter(width=0.2, size=2) +
+#     scale_fill_manual(values=col2) +
+#     theme(title=element_text(size=14,color="#4F4F4F"))+
+#     facet_wrap(.~variable, scales = "free", nrow=2)+
+#     stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="red", size=2)+
+#     theme_bw()+ 
+#     theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+#     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+#     theme(legend.title = element_blank())+ 
+#     theme(legend.position='none')+
+#     theme(plot.title = element_text(hjust = 0.5))+
+#     labs(y= "Counts", x="Group")
+
+
+## mmc3 免疫浸润
+
+gene_set<-read.csv("D:/Bcells/Bcells/database/mmc3.csv")[1:876, 1:2]
+list<- split(as.matrix(gene_set)[,1], gene_set[,2])
+
+set.seed(001)
+gsva_matrix<- gsva(as.matrix(gene), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+normalization<-function(x){
+  return((x-min(x))/(max(x)-min(x)))}
+nor_gsva_matrix <- normalization(gsva_matrix)
+
+data1 <- as.data.frame(t(nor_gsva_matrix[, metadata1$PtID]))
+data1$groups <- metadata1$TLSgroup
+data2 <- melt(data1, id.vars = c("groups"))
+d <- as.data.frame(t(as.data.frame(strsplit(as.character(data2$variable), '_'))))
+data2$cell <- d$V1
+col2<- c("#0167b9", "#f59701")
+
+data2$cell <- factor(data2$cell, levels =  c("Activated B cell", "Germinal center B cell", "Immature  B cell", "Memory B cell", "Plasma cell", "Effector memeory CD4 T cell", "Central memory CD4 T cell", "Activated CD4 T cell", "Activated CD8 T cell", "Effector memeory CD8 T cell", "Central memory CD8 T cell", "Regulatory T cell", "T follicular helper cell", "Type 1 T helper cell", "Type 17 T helper cell", "Type 2 T helper cell", "Gamma delta T cell", "Natural killer T cell", "Natural killer cell", "CD56bright natural killer cell", "CD56dim natural killer cell", "Activated dendritic cell", "Immature dendritic cell", "Plasmacytoid dendritic cell", "Neutrophil", "Eosinophil", "Macrophage", "Mast cell", "MDSC", "Monocyte"))                       
+                                      
+### fig 2A                    
+                                        
+ggplot(data2,aes(cell,value,fill = groups)) + 
+    geom_boxplot(outlier.shape = 21,color = "black") + 
+    theme_bw() + 
+    labs(x = "Cell Type", y = "Estimated Proportion") +
+    theme(legend.position = "top") + 
+    theme(axis.text.x = element_text(angle=80,hjust = 1, vjust=1))+
+    scale_fill_manual(values = col2)+ 
+    stat_compare_means(aes(group = groups,label = ..p.signif..),method = "kruskal.test")
+
+
+## GSEA hallmark
+
+group_list=as.character(metadata1$TLS)
+group_list[group_list == "0"] <- "group_0"
+group_list[group_list != "group_0"] <- "group_1"
+
+design <- model.matrix(~0 + factor(group_list) + metadata1$batch)
+colnames(design)=c("group_0", "group_1", "batch")
+rownames(design)=colnames(gene1)
+y <- voom(gene1, design, plot = F)
+fit <- lmFit(y, design)
+contrast.matrix <- makeContrasts(group_1 - group_0, levels = colnames(coef(fit)))
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2)
+tempOutput = topTable(fit2, coef=1, n=Inf)
+nrDEG = na.omit(tempOutput) 
+
+geneList <- nrDEG$logFC
+names(geneList) <- rownames(nrDEG)
+geneList=sort(geneList,decreasing = T)
+
+immune <- read.csv("D:/Bcells/Bcells/database/immport.csv",header = T, sep = ',')
+imm <- immune[,c(5,2)]
+colnames(imm) <- c("term", "gene")
+gmt <- read.gmt("D:/Bcells/Bcells/database/all.6.symbols.gmt")
+gmt.b <- gmt[c(1:4813),]
+set.seed(001)
+gsea.1 <- GSEA(geneList,
+             TERM2GENE = gmt.b) 
+
+
+
+# fig2 B
+library(circlize)
+
+dat <- read.csv('D:/Bcells/Bcells/processing data/GEEA_result.csv', header = T, sep = ',',row.names = 1)
+
+rownames(dat) <- dat$ID
+
+#以category排序
+
+dat <- dat[order(dat$category),]
+circos.par(gap.degree = 0.5, start.degree = 90)
+plot_data <- dat[c('ID', 'gene_num.min', 'gene_num.max')]
+
+#分配颜色
+
+color_assign <- c('A.Immune system' = '#954572', 'Cell cycle regulation' = '#F7CC13', 'Expression or translational regulation'='#33A02CFF', "Others" = "grey")
+ko_color <- color_assign[dat$category]
+
+circos.genomicInitialize(plot_data, plotType = NULL, major.by = 1)
+circos.track(
+  ylim = c(0, 1), track.height = 0.05, bg.border = NA, bg.col = ko_color,
+  panel.fun = function(x, y) {
+    ylim = get.cell.meta.data('ycenter')#ylim、xlim
+    xlim = get.cell.meta.data('xcenter')
+    sector.name = get.cell.meta.data('sector.index')#sector.name
+    circos.axis(h = 'top', labels.cex = 0.4, labels.niceFacing = FALSE)
+    circos.text(xlim, ylim, sector.name, cex = 0.4, niceFacing = FALSE)
+  } )
+
+##第二圈，绘制富集的基因和富集p值
+plot_data <- dat[c('ID', 'gene_num.min', 'Count', 'log10Pvalue')]
+label_data <- dat['Count']
+p_max <- round(max(dat$'log10Pvalue')) + 1  
+colorsChoice <- colorRampPalette(c('#FF906F', '#861D30'))
+color_assign <- colorRamp2(breaks = 0:p_max, col = colorsChoice(p_max + 1))
+
+circos.genomicTrackPlotRegion(
+  plot_data, track.height = 0.08, bg.border = NA, stack = TRUE,
+  panel.fun = function(region, value,...) {
+    circos.genomicRect(region, value, col = color_assign(value[[1]]), border = NA,...)
+    ylim = get.cell.meta.data('ycenter')  
+    xlim = label_data[get.cell.meta.data('sector.index'),1] / 2
+    sector.name = label_data[get.cell.meta.data('sector.index'),1]
+    #circos.text(xlim, ylim, sector.name, cex = 0.4, niceFacing = FALSE)
+  } )
+
+##第三圈，绘制上下调基因
+dat$all.regulated <- dat$up.regulated + dat$down.regulated
+dat$up.proportion <- dat$up.regulated / dat$all.regulated
+dat$down.proportion <- dat$down.regulated / dat$all.regulated
+
+dat$up <- dat$up.proportion * dat$gene_num.max
+plot_data_up <- dat[c('ID', 'gene_num.min', 'up')]
+names(plot_data_up) <- c('ID', 'start', 'end')
+plot_data_up$type <- 1 
+
+dat$down <- dat$down.proportion * dat$gene_num.max + dat$up
+plot_data_down <- dat[c('ID', 'up', 'down')]
+names(plot_data_down) <- c('ID', 'start', 'end')
+plot_data_down$type <- 2 
+
+plot_data <- rbind(plot_data_up, plot_data_down)
+label_data <- dat[c('up', 'down', 'up.regulated', 'down.regulated')]
+color_assign <- colorRamp2(breaks = c(1, 2), col = c('red', 'blue'))
+
+circos.genomicTrackPlotRegion(
+  plot_data, track.height = 0.08, bg.border = NA, stack = TRUE, 
+  panel.fun = function(region, value, ...) {
+    circos.genomicRect(region, value, col = color_assign(value[[1]]), border = NA, ...) 
+    ylim = get.cell.meta.data('cell.bottom.radius') - 0.5 
+    xlim = label_data[get.cell.meta.data('sector.index'),1] / 2
+    sector.name = label_data[get.cell.meta.data('sector.index'),3]
+    #circos.text(xlim, ylim, sector.name, cex = 0.4, niceFacing = FALSE)  
+    xlim = (label_data[get.cell.meta.data('sector.index'),2]+label_data[get.cell.meta.data('sector.index'),1]) / 2
+    sector.name = label_data[get.cell.meta.data('sector.index'),4]
+    #circos.text(xlim, ylim, sector.name, cex = 0.4, niceFacing = FALSE)
+  } )
+
+##第四圈，绘制富集因子
+plot_data <- dat[c('ID', 'gene_num.min', 'gene_num.max', 'rich.factor')] 
+label_data <- dat['category']  
+color_assign <- c('A.Immune system' = '#954572', 'Cell cycle regulation' = '#F7CC13', 'Expression or translational regulation'='#33A02CFF', "Others" = "grey")#各二级分类的名称和颜色
+
+#value值超出了track.height，乘以该值，控制bar的高度即可
+
+circos.genomicTrack(
+  plot_data, ylim = c(0, 1), track.height = 0.3, bg.col = 'gray95', bg.border = NA,
+  panel.fun = function(region, value, ...) {
+    sector.name = get.cell.meta.data('sector.index')  #sector.name 
+    circos.genomicRect(region, value*0.3, col = color_assign[label_data[sector.name,1]], border = NA, ytop.column = 1, ybottom = 0, ...) 
+    circos.lines(c(0, max(region)), c(0.5, 0.5), col = 'gray', lwd = 0.3) 
+  } )
+
+#画legend需要这个包（注意替换自己的变量）
+
+library(ComplexHeatmap)
+
+category_legend <- Legend(
+  labels = c('A.Immune system', 'Cell cycle regulation', 'Expression or translational regulation', "Others" ),#各二级分类的名称
+  type = 'points', pch = NA, background = c('#954572', '#F7CC13', '#33A02CFF', 'grey'), #各二级分类的颜色
+  labels_gp = gpar(fontsize = 8), grid_height = unit(0.5, 'cm'), grid_width = unit(0.5, 'cm'))
+
+updown_legend <- Legend(
+  labels = c('Up-regulated', 'Down-regulated'), 
+  type = 'points', pch = NA, background = c('red', 'blue'), 
+  labels_gp = gpar(fontsize = 8), grid_height = unit(0.5, 'cm'), grid_width = unit(0.5, 'cm'))
+
+pvalue_legend <- Legend(
+  col_fun = colorRamp2(round(seq(0, p_max, length.out = 6), 0), 
+                       colorRampPalette(c('#FF906F', '#861D30'))(6)),
+  legend_height = unit(3, 'cm'), labels_gp = gpar(fontsize = 8), 
+  title_gp = gpar(fontsize = 9), title_position = 'topleft', title = '-Log10(Pvalue)')
+
+lgd_list_vertical <- packLegend(category_legend, updown_legend, pvalue_legend)
+grid.draw(lgd_list_vertical)
+
+circos.clear()
+dev.off()
+
+
+library(GseaVis)
+### fig 2C   
+
+gseaNb(object = gsea.1,
+       geneSetID = c('BIOCARTA_IL7_PATHWAY'),
+       subPlot = 2,
+       addGene = c("IL7", "PIK3CG", "FYN", "JAK3", "IL7R", "LCK"), addPval = T)
+
+gseaNb(object = gsea.1,
+       geneSetID = c('BIOCARTA_CSK_PATHWAY'),
+       subPlot = 2,
+       addGene = c("PTPRC", "CD3D", "ZAP70", "PRKACB", "PRKACG", "PRKAR2A", "LCK", "CD3G", "HLA-DRB5"), addPval = T)
+
+gseaNb(object = gsea.1,
+       geneSetID = c('BIOCARTA_CTLA4_PATHWAY'),
+       subPlot = 2,
+       addGene = c("ICOS", "CD3D", "CTLA4", "CD28", "CD80", "IL2", "LCK", "CD3G", "HLA-DRB5"), addPval = T)
+
+gseaNb(object = gsea.1,
+       geneSetID = c('BIOCARTA_TCRA_PATHWAY'),
+       subPlot = 2,
+       addGene = c("PTPRC", "CD3D", "FYN", "ZAP70", "LCK", "CD3G", "HLA-DRB5"), addPval = T)
+
+
+```
+
+
+## Fig 3
+
+```{r}
+library("survival")
+library("survminer")
+library(plyr)
+
+## discovery cohort
+
+cli <- read.xlsx("D:/Bcells/Bcells/clinical data/discovery cohort.xls",sheetIndex = 2, row.names = TRUE, header = TRUE)
+
+fit <- survfit(Surv(OS_time, OS_event) ~ total_cd20_group_211212, data = cli)
+
+ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#26496d", "#8a4048"),
+           break.x.by=12)
+
+dat <- as.data.frame(cli[, c(3,10,12,14,18,19)])
+dat$TLS_posi <- as.numeric(cli$TLS_posi)
+dat$total_cd20_group_211212 <- as.numeric(cli$total_cd20_group_211212)
+dat$T <- ifelse(dat$T > 2, 1, 0)
+dat$N <- ifelse(dat$N > 1, 1, 0)
+colnames(dat) <- make.names(colnames(dat))
+
+y<- Surv(time=cli$OS_time,event=cli$OS_event==1)
+
+
+#批量单因素回归模型建立：Uni_cox_model
+Uni_cox_model<- function(x){
+    FML <- as.formula(paste0 ("y~",x))
+    cox<- coxph(FML,data=dat)
+    cox1<-summary(cox)
+    HR <- round(cox1$coefficients[,2],2)
+    PValue <- round(cox1$coefficients[,5],3)
+    CI5 <-round(cox1$conf.int[,3],2)
+    CI95 <-round(cox1$conf.int[,4],2)
+    Uni_cox_model<- data.frame('Characteristics' = x,
+                               'HR' = HR,
+                               'CI5' = CI5,
+                               'CI95' = CI95,
+                               'p' = PValue)
+    return(Uni_cox_model)}  
+
+variable.names<- colnames(dat)
+Uni_cox <- lapply(variable.names, Uni_cox_model)
+Uni_cox<- ldply(Uni_cox,data.frame)
+Uni_cox$CI<-paste(Uni_cox$CI5,'-',Uni_cox$CI95)
+Uni_cox<-Uni_cox[,-3:-4]
+View(Uni_cox)
+
+## 多因素
+Uni_cox$Characteristics[Uni_cox$p<1]
+mul_cox_model<- as.formula(paste0 ("y~",                                   paste0(Uni_cox$Characteristics[Uni_cox$p<1],
+                                                                                  collapse = "+")))
+mul_cox<-coxph(mul_cox_model,data=dat)
+cox4<-summary(mul_cox) 
+
+mul_HR<- round(cox4$coefficients[,2],2) 
+mul_PValue<- round(cox4$coefficients[,5],4) 
+mul_CI1<-round(cox4$conf.int[,3],2)
+mul_CI2<-round(cox4$conf.int[,4],2)
+mul_CI<-paste(mul_CI1,'-',mul_CI2)
+mul_cox1<- data.frame("HR"=mul_HR,"CI"=mul_CI, "P"=mul_PValue)
+
+mul_CI2[which(mul_CI2 > 10)] = 10
+mul_HR[which(mul_HR > 10)] = 10
+cox<- data.frame("mean"=mul_HR,"lower"=mul_CI1, "upper" = mul_CI2, "P"=mul_PValue)
+
+View(mul_cox1)
+
+mul_cox1<- data.frame("HR"=mul_HR,"CI"=mul_CI, "lw"= mul_CI1, "up"= mul_CI2, "P"=mul_PValue)
+library(forestplot)
+mul_cox1$ids <- rownames(mul_cox1)
+forestplot(mul_cox1[, c(6,1,2,5)],
+           mean= log2(mul_cox1$HR),
+           lower=log2(mul_cox1$lw), upper=log2(mul_cox1$up),
+           boxsize=0.2,
+           ref_line = 0,
+           col=fpColors(box="#ba3520", lines="black"),
+           cex=0.9, lineheight = "auto",
+           colgap=unit(5,"mm"),
+           lwd.ci=2, 
+           ci.vertices=TRUE, ci.vertices.height = 0.1,xlim = c(-2, 4))
+
+
+## validation cohort 1
+
+cli.2 <- read.xlsx("D:/Bcells/Bcells/clinical data/validation cohort 1.xls",sheetIndex = 3, row.names = TRUE, header = TRUE)
+
+fit.2 <- survfit(Surv(OStime, OS) ~ Bgroup, data = cli.2)
+
+ggsurvplot(fit.2, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#26496d", "#8a4048"),
+           break.x.by=12)
+
+
+dat <- as.data.frame(cli.2[, c(1:6)])
+
+y<- Surv(time=cli.2$OStime,event=cli.2$OS==1)
+
+
+# Uni_cox_model
+Uni_cox_model<- function(x){
+    FML <- as.formula(paste0 ("y~",x))
+    cox<- coxph(FML,data=dat)
+    cox1<-summary(cox)
+    HR <- round(cox1$coefficients[,2],2)
+    PValue <- round(cox1$coefficients[,5],3)
+    CI5 <-round(cox1$conf.int[,3],2)
+    CI95 <-round(cox1$conf.int[,4],2)
+    Uni_cox_model<- data.frame('Characteristics' = x,
+                               'HR' = HR,
+                               'CI5' = CI5,
+                               'CI95' = CI95,
+                               'p' = PValue)
+    return(Uni_cox_model)}  
+
+variable.names<- colnames(dat)
+Uni_cox <- lapply(variable.names, Uni_cox_model)
+Uni_cox<- ldply(Uni_cox,data.frame)
+Uni_cox$CI<-paste(Uni_cox$CI5,'-',Uni_cox$CI95)
+Uni_cox<-Uni_cox[,-3:-4]
+View(Uni_cox)
+
+## 多因素
+Uni_cox$Characteristics[Uni_cox$p<1]
+mul_cox_model<- as.formula(paste0 ("y~",                                   paste0(Uni_cox$Characteristics[Uni_cox$p<1],
+                                                                                  collapse = "+")))
+mul_cox<-coxph(mul_cox_model,data=dat)
+cox4<-summary(mul_cox) 
+
+mul_HR<- round(cox4$coefficients[,2],2) 
+mul_PValue<- round(cox4$coefficients[,5],4) 
+mul_CI1<-round(cox4$conf.int[,3],2)
+mul_CI2<-round(cox4$conf.int[,4],2)
+mul_CI<-paste(mul_CI1,'-',mul_CI2)
+mul_cox1<- data.frame("HR"=mul_HR,"CI"=mul_CI, "P"=mul_PValue)
+
+mul_CI2[which(mul_CI2 > 10)] = 10
+mul_HR[which(mul_HR > 10)] = 10
+cox<- data.frame("mean"=mul_HR,"lower"=mul_CI1, "upper" = mul_CI2, "P"=mul_PValue)
+
+View(mul_cox1)
+
+mul_cox1<- data.frame("HR"=mul_HR,"CI"=mul_CI, "lw"= mul_CI1, "up"= mul_CI2, "P"=mul_PValue)
+library(forestplot)
+mul_cox1$ids <- rownames(mul_cox1)
+mul_cox1 <- mul_cox1[c("Age", "Sex", "T", "N", "Bgroup", "TLS"),]
+forestplot(mul_cox1[, c(6,1,2,5)],
+           mean= log2(mul_cox1$HR),
+           lower=log2(mul_cox1$lw), upper=log2(mul_cox1$up),
+           boxsize=0.2,
+           ref_line = 0,
+           col=fpColors(box="#ba3520", lines="black"),
+           cex=0.9, lineheight = "auto",
+           colgap=unit(5,"mm"),
+           lwd.ci=2, 
+           ci.vertices=TRUE, ci.vertices.height = 0.1,xlim = c(-2, 4))
+
+
+```
+
+
+## Fig.4 
+### A-B. 免疫相关基因(immport数据库)DEGs
+
+```{r}
+library(ggrepel)
+immune <- read.csv("D:/Bcells/Bcells/database/immport.csv",header = T, sep = ',')
+
+suppressMessages(library(limma))
+
+uniq.id <- intersect(unique(immune$Symbol), rownames(gene1))
+gene.imm <- gene1[uniq.id,]
+
+group_list=as.character(metadata1$TLS)
+group_list[group_list == "0"] <- "group_0"
+group_list[group_list != "group_0"] <- "group_1"
+
+## 利用所有的免疫相关基因，统计DEGs
+
+design <- model.matrix(~0 + factor(group_list) + metadata1$batch)
+colnames(design)=c("group_0", "group_1", "batch")
+rownames(design)=colnames(gene.imm)
+y <- voom(gene.imm, design, plot = F)
+fit <- lmFit(y, design)
+contrast.matrix <- makeContrasts(group_1 - group_0, levels = colnames(coef(fit)))
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2)
+tempOutput = topTable(fit2, coef=1, n=Inf)
+nrDEG = na.omit(tempOutput) 
+
+knitr::kable(nrDEG[which(nrDEG$P.Value < 0.01 & nrDEG$logFC < 0),])
+
+
+## 火山图
+nrDEG$label <- ifelse(nrDEG$P.Value < 0.01 & nrDEG$logFC > 0, as.character(rownames(nrDEG)), "")
+
+p1 <- ggplot(
+    # 数据、映射、颜色
+    nrDEG, aes(x = logFC, y = -log10(P.Value))) +
+    geom_point(alpha=0.6, size=2) +
+    scale_color_manual(values=c("grey","#f59701"))+
+    scale_shape_manual(values = c(19, 15, 17))+
+    # 辅助线
+    geom_vline(xintercept = 0,lty=2,col="black",lwd=0.5) +
+    geom_hline(yintercept = -log10(0.01),lty=2,col="black",lwd=0.5) +
+    # 坐标轴
+    labs(x="log2 (fold change)",
+         y="-log10 (P.value)")+
+    theme_bw()+
+    # 图例
+    theme(plot.title = element_text(hjust = 0.5), 
+          legend.position="right", 
+          legend.title = element_blank())+
+    geom_text_repel(data = nrDEG, aes(x = logFC, y = -log10(P.Value),
+                                      label = label),color = "black",
+                    size = 3, box.padding = unit(0.5, "lines"),
+                    point.padding = unit(0.8, "lines"), 
+                    segment.color = "black", 
+                    show.legend = FALSE)
+
+##基因表达热图
+
+id <- rownames(nrDEG[which(nrDEG$P.Value < 0.01 & nrDEG$logFC > 0),])
+no <- metadata1$PtID[which(metadata1$TLSgroup == "TLS=0")]
+yes <- metadata1$PtID[which(metadata1$TLSgroup == "TLS≥1")]
+datas <- cbind(gene.imm[id,no], gene.imm[id,yes])
+
+annotation_col <- data.frame(
+  TLS = metadata1$TLSgroup)
+rownames(annotation_col) <- metadata1$PtID
+
+p2 <- pheatmap(
+    datas,
+    scale = "row",
+    show_colnames = FALSE,
+    cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    gaps_col = 67,
+    annotation_col = annotation_col,
+    color = colorRampPalette(c("navy", "white", "firebrick3"))(50), 
+    border = FALSE
+)
+
+```
+
+
+
+### C. 单测 GSE150825
+
+```{r}
+
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+library(stringr)
+library(ggrepel)
+library(EnhancedVolcano)
+library(GOplot)
+library(DoubletFinder)
+library(tidyverse)
+library(Seurat)
+library(patchwork)
+library(celldex)
+library(scmap)
+
+
+#Load raw matrix data
+setwd("D:/Bcells/GSE150825")
+load(file = "NPC.lab.rda")
+NPC <- subset(NPC, subset = nFeature_RNA > 200 & nFeature_RNA < 4000 & percent.mt < 15 & DF_hi.lo == "Singlet")
+
+NPC <- NormalizeData(NPC, normalization.method = "LogNormalize", scale.factor = 10000)
+NPC <- FindVariableFeatures(NPC, selection.method = "vst", nfeatures = 2000)
+
+
+NPC <- ScaleData(NPC)
+NPC <- RunPCA(NPC, features = VariableFeatures(object = NPC))
+
+NPC <- FindNeighbors(NPC, dims = 1:15)
+NPC <- FindClusters(NPC, resolution = 1)
+
+
+NPC <- RunTSNE(NPC, dims = 1:15)
+DimPlot(NPC, reduction = "tsne", pt.size = 1, label = TRUE, label.size = 6) + NoLegend()
+
+cluster <- read.csv("D:/Bcells/Bcells/processing data/cell_type.csv",header = T, sep = ',')
+
+NPC@meta.data$customclass = ""
+for(j in unique(cluster$cluster)){
+    cl_type = cluster[cluster$cluster==j,]; 
+    NPC@meta.data$customclass[NPC@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+
+DimPlot(NPC, reduction = "tsne", pt.size = 1, label = TRUE, label.size = 6, group.by = 'customclass') + NoLegend()
+
+
+
+
+modify_vlnplot <- function(obj, feature, pt.size = 0, plot.margin = unit(c(-0.75, 0, -0.75, 0), "cm"),...) {
+  p <- VlnPlot(obj, features = feature, pt.size = pt.size, ... ) +
+    theme_void() +
+    ylab(feature) +
+    theme(legend.position = 'none',
+          plot.margin = plot.margin,
+          title = element_blank(),
+          axis.title.y = element_text(hjust = 0.5, angle = 0)
+          )
+  return(p)
+}
+
+
+
+## main function
+StackedVlnPlot <- function(obj, features, pt.size = 0, plot.margin = unit(c(-0.75, 0, -0.75, 0), "cm"), ...) {
+  plot_list <- purrr::map(features, function(x) modify_vlnplot(obj = obj,feature = x, ...))
+  plot_list[[length(plot_list)]]<- plot_list[[length(plot_list)]] +
+    theme(axis.text.x=element_text(angle = 90), axis.ticks.x = element_line())
+  p <- patchwork::wrap_plots(plotlist = plot_list, ncol = 1)
+  return(p)
+}
+
+my36colors <-c('#E5D2DD', '#53A85F', '#F1BB72', '#F3B1A0', '#D6E7A3', '#57C3F3', '#476D87',
+               '#E95C59', '#E59CC4', '#AB3282', '#23452F', '#BD956A', '#8C549C', '#585658',
+               '#9FA3A8', '#E0D4CA', '#5F3D69', '#C5DEBA', '#58A4C3', '#E4C755', '#F7F398',
+               '#AA9A59', '#E63863', '#E39A35', '#C1E6F3', '#6778AE', '#91D0BE', '#B53E2B',
+               '#712820', '#DCC1DD', '#CCE0F5',  '#CCC9E6', '#625D9E', '#68A180', '#3A6963',
+               '#968175'
+)
+classmk <-c("ZAP70", "IL7", "CD19", "TRBV6-6","TNFRSF13C", "PPBPP2")
+StackedVlnPlot(NPC, c(classmk), pt.size=0, cols=my36colors)
+
+
+```
+
+
+### D. 生存分析 
+
+```{r}
+library(GSVA)
+library(survival)
+library(survminer)
+library(tidyverse)
+library(genefilter)
+library(Biobase)
+library(stringr)
+library(xlsx)
+library(ggsci)
+
+## validation cohort 1
+metadata <- read.xlsx("D:/Bcells/Bcells/clinical data/validation cohort 1.xls",sheetIndex = 2, row.names = TRUE, header = TRUE)
+gene <- read.csv("D:/Bcells/Bcells/ngs data/gene_exp_cohort 1.csv",header = T, sep = ',', row.names = 1, check.names=F)
+gene_set<-read.csv("D:/Bcells/Bcells/database/mmc3.csv")[, 1:2]
+list<- split(as.matrix(gene_set)[,1], gene_set[,2])
+
+set.seed(001)
+gsva_matrix<- gsva(as.matrix(gene), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+
+metadata$TLS <- gsva_matrix["TLS", metadata$PtID]
+
+## propotion
+metadata <- metadata %>% 
+    mutate(TLS_M = ifelse(TLS > metadata$TLS[order(metadata$TLS)][round(length(metadata$TLS)*0.71)] ,"High" , "Low"))
+fit <- survfit(Surv(OStime, OS)~TLS_M, data=metadata)
+
+ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=12)
+
+
+fit <- survfit(Surv(DFStime, DFS)~TLS_M, data=metadata)
+
+ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=12)
+
+
+## validation cohort 2
+
+uni_matrix=read.table("D:/Bcells/bcr/GSE102349_NPC_mRNA_processed.txt",sep="\t",stringsAsFactors=FALSE,header=TRUE,check.names=FALSE)
+meta <- read.csv("D:/Bcells/bcr/GSE102349_metadata.csv",header = T, row.names = 1)
+
+index=order(rowMeans(uni_matrix[,-1]),decreasing = T)
+expr_ordered=uni_matrix[index,]
+keep=!duplicated(expr_ordered$Gene_Symbol)
+expr_max_uni_matrix=expr_ordered[keep,]
+rownames(expr_max_uni_matrix) <- expr_max_uni_matrix$Gene_Symbol
+expr_max_uni_matrix <- expr_max_uni_matrix[,-1]
+
+list<- split(as.matrix(gene_set)[,1], gene_set[,2])
+set.seed(001)
+gsva_matrix1<- gsva(as.matrix(expr_max_uni_matrix), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+
+
+## sfig 1
+
+t1 <- as.data.frame(t(gsva_matrix))
+t2 <- as.data.frame(t(gsva_matrix1))
+t1$type <- "Array"
+t2$type <- "RNA-seq"
+
+data1 <- as.data.frame(rbind(t1, t2))
+ggplot(data1, aes(x = TLS, y = TLS1, color = type)) +
+    geom_point(alpha=0.7)+
+    scale_color_jama()+
+labs(x = "TLS", y = "TLS-nature1")+
+    geom_smooth(size=2, method =lm )+ 
+    theme(axis.text.x =element_text(size=12), axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="top")+
+    stat_cor(data=data1, method = "spearman", color="black", size=6)+
+    theme_classic()
+
+
+
+# library(TCGAbiolinks)
+# library(SummarizedExperiment)
+# 
+# 
+# 
+# HNSC <- GDCquery(project = "TCGA-HNSC",
+#          data.category = "Transcriptome Profiling",
+#          data.type = "Gene Expression Quantification",
+#          workflow.type = "STAR - Counts")
+# # GDCdownload(HNSC,method="api")
+# 
+# expr <- GDCprepare(query=HNSC)
+# count <- as.data.frame(assay(expr))
+# exp_FPKM <- as.data.frame(assay(expr,i = "fpkm_unstrand"))
+# 
+# 
+# ##基因ID转换（ENSEMBL to Gene Symbol）
+# ids_Gene <- data.frame(expr@rowRanges@elementMetadata@listData)
+# ids <- ids_Gene[,c("gene_id","gene_name","gene_type")]
+# dat <- exp_FPKM
+# colnames(ids)[1:2]=c('ensemble_id','symbol')  
+# ids=ids[ids$symbol != '',]
+# ids=ids[ids$ensemble_id %in%  rownames(dat),]
+# dat=dat[ids$ensemble_id,]
+# 
+# ##去重复,这里保留最大的那个。
+# ids$max=apply(dat,1,mean) 
+# ids=ids[order(ids$symbol,ids$max,decreasing = T),]
+# ids=ids[!duplicated(ids$symbol),]
+# dat=dat[ids$ensemble_id,] 
+# rownames(dat)=ids$symbol
+# exp_FPKM <- exp_FPKM[ids$ensemble_id,] 
+# rownames(exp_FPKM)=ids$symbol
+# exp_FPKM <- exp_FPKM[order(rownames(exp_FPKM),decreasing = F),]
+# 
+# ## 提取肿瘤组织，修改样本编号
+# group <- strsplit(colnames(exp_FPKM),"[-]")
+# class<-sapply(group,function(I){I[4]})
+# control<-grepl("11",class)
+# control<-which(control==TRUE)
+# class[control]<-"normal"
+# class[-control]<-"cancer"
+# exp_hnsc <- exp_FPKM[,which(class == "cancer")]
+# 
+# newid<-lapply(strsplit(colnames(exp_hnsc),'-'),function(i){paste0(i[1:3],collapse = '-')})
+# newid<-sapply(1:ncol(exp_hnsc),function(i){newid[[i]]})
+# colnames(exp_hnsc) <- newid
+# 
+# ## GSVA及生存分析
+# cli <- read.csv("D:/Bcells/HNSC/NMF.HNSC.csv",header = T, row.names = 1)
+# id <- intersect(rownames(cli), colnames(exp_hnsc))
+# 
+# exp <- exp_hnsc[,id]
+# clis <-cli[id,] 
+# 
+# set.seed(001)
+# gsva_matrix<- gsva(as.matrix(exp), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+# 
+# clis$TLS <- gsva_matrix["TLS", rownames(clis)]
+# res.cut <- surv_cutpoint(clis, #数据集
+#                          time = "PFS", #生存状态
+#                          event = "PFS_Flag", #生存时间
+#                          variables = c("TLS") #需要计算的数据列名
+# )
+# 
+# res.cat <- surv_categorize(res.cut)
+
+clis <- read.csv("D:/Bcells/Bcells/processing data/HNSC.csv",header = T, sep = ',', row.names = 1, check.names=F)
+
+clis$OS_time <- clis$OS*12/365
+cli <- subset(clis, OS_time < 150)
+fit <- survfit(Surv(OS_time, OS_FLAG)~TLS_M, data=cli)
+ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c( "#8a4048", "#26496d"),
+           break.x.by=12)
+
+
+## sfig
+
+library(immunarch)
+library(ggpubr)
+
+
+immdata <- repLoad("D:/Bcells/bcr/bcr")
+#immdata1 <- repFilter(immdata, .method = "by.meta", .query = list(TLS = exclude(NA)))
+
+## TCR
+
+immdata1.tcr <- repFilter(immdata, .method = "by.clonotype", .query = list(C.name = include("TRAC", "TRBC")), .match="startswith")
+
+# table(immdata$data$SRR5908747$C.name)
+#    . IGHA1 IGHA2  IGHD  IGHE IGHG1 IGHG2 IGHG3 IGHG4  IGHM  IGKC  IGLC  TRAC  TRBC  TRGC 
+# 1596  5421  1470    11     2  4425  2408   586   773    42 10134  4217    63   125     8 
+## IGHA;IGHD;IGHE;IGHM;IGHG;IGK;IGL;TR
+
+exp_vol <- repExplore(immdata1.tcr$data, .method = "volume")
+vis(exp_vol, .by = c("group"), .meta = immdata$meta)
+
+immdata1.igh$data <- immdata1.tcr$data[rownames(data.meta)[order(data.meta$TLS)]]
+imm_hom <- repClonality(immdata1.tcr$data, .method = "homeo", .clone.types = c(Rare= .001, Small = .01, Medium = .1, Large = .5, Hyperexpanded = 1))
+
+vis(imm_hom*data.meta$norm.value, .by = c("group"), .meta = immdata$meta)
+
+## BCR
+
+immdata1.bcr <- repFilter(immdata, .method = "by.clonotype", .query = list(C.name = include("IGH")), .match="startswith")
+
+# table(immdata1.igh$data$SRR5908747$C.name)
+#    . IGHA1 IGHA2  IGHD  IGHE IGHG1 IGHG2 IGHG3 IGHG4  IGHM  IGKC  IGLC  TRAC  TRBC  TRGC 
+# 1596  5421  1470    11     2  4425  2408   586   773    42 10134  4217    63   125     8 
+## IGHA;IGHD;IGHE;IGHM;IGHG;IGK;IGL;TR
+
+exp_vol <- repExplore(immdata1.bcr$data, .method = "volume")
+vis(exp_vol, .by = c("group"), .meta = immdata$meta)
+
+immdata1.bcr$data <- immdata1.bcr$data[rownames(data.meta)[order(data.meta$TLS)]]
+imm_hom <- repClonality(immdata1.bcr$data, .method = "homeo", .clone.types = c(Rare= .001, Small = .01, Medium = .1, Large = .5, Hyperexpanded = 1))
+
+vis(imm_hom*data.meta$norm.value, .by = c("group"), .meta = immdata$meta)
+
+```
+
+
+
+## Figure 5
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(clusterProfiler)
+
+gene <- read.csv("D:/Bcells/ICB/GSE91061_BMS038109Sample.hg19KnownGene.fpkm.csv",header = T, sep = ',', row.names = 1, check.names=F)
+name <- bitr(rownames(gene),fromType = 'ENTREZID',toType = 'SYMBOL',OrgDb = 'org.Hs.eg.db')
+gene1 <- cbind(name, gene[name$ENTREZID,])
+rownames(gene1) <- gene1$SYMBOL
+gene.GSE91061 <- gene1[,-c(1,2)]
+
+gene_set<-read.csv("D:/Bcells/Bcells/database/mmc3.csv")[, 1:2]
+list<- split(as.matrix(gene_set)[,1], gene_set[,2])
+
+set.seed(001)
+gsva_matrix<- gsva(as.matrix(gene.GSE91061), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+
+meta.GSE91061<- read_excel("D:/Bcells/ICB/survival.xlsx", sheet = 3, col_names = TRUE)
+
+meta.GSE91061$TLS <- gsva_matrix["TLS", meta.GSE91061$id1]
+meta.GSE91061$OS <- as.numeric(meta.GSE91061$OS)/4
+meta.GSE91061$status <- as.numeric(meta.GSE91061$status)
+
+## pre
+meta1 <- subset(meta.GSE91061, id3 == "Pre")
+
+res.cut <- surv_cutpoint(meta1, 
+                         time = "OS", 
+                         event = "status", 
+                         variables = c("TLS") 
+)
+
+res.cat <- surv_categorize(res.cut)
+
+fit <- survfit(Surv(OS, status)~TLS, data=res.cat)
+
+p1 <- ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=12)
+
+
+## on
+meta1 <- subset(meta.GSE91061, id3 == "On")
+
+res.cut <- surv_cutpoint(meta1, 
+                         time = "OS", 
+                         event = "status", 
+                         variables = c("TLS") 
+)
+
+res.cat <- surv_categorize(res.cut)
+
+fit <- survfit(Surv(OS, status)~TLS, data=res.cat)
+
+p2 <- ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=12)
+
+
+meta <- meta.GSE91061
+meta$Response[meta$Response == "CR"] = "CR/PR"
+meta$Response[meta$Response == "PR"] = "CR/PR"
+meta$Response[meta$Response == "SD"] = "SD/PD"
+meta$Response[meta$Response == "PD"] = "SD/PD"
+meta1 <- subset(meta, Response %in% c("CR/PR", "SD/PD"))
+
+meta1$Response <- factor(meta1$Response,levels=c("CR/PR","SD/PD"))
+my_comparisons <- list(c("SD/PD", "CR/PR"))
+p3 <- ggplot(data=meta1, aes(x = Response, y = TLS)) +
+    geom_boxplot(aes(x=Response, fill=Response), notch=FALSE, outlier.colour = "white", color = "black") +
+    stat_summary(aes(x=Response), fun.y=mean, geom="point", color = "red") +
+    geom_jitter(width=0.2, size=2) +
+    theme(title=element_text(size=14,color="black"))+
+    stat_compare_means(comparisons = my_comparisons, paired = FALSE, color="black",label = "p.signif", size=5)+
+    theme_classic()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y= "TLS value", x="")
+
+
+
+my_comparisons <- list(c("Pre", "On"))
+meta2 <- subset(meta1, id2 %in% names(which(table(meta1$id2) == 2)))
+meta2$id3 <- factor(meta2$id3, level = c("Pre", "On")) 
+p4 <- ggplot(data=meta2, aes(x = id3, y = TLS)) +
+    geom_line(aes(group=id2), color="gray")+
+    geom_point(aes(color = id3), size = 2) +
+    geom_boxplot(aes(fill= id3), notch=FALSE, color = "black", alpha = 0.6) +
+    scale_fill_jama()+
+    scale_color_jama()+
+    theme(title=element_text(size=14,color="black"))+
+    stat_compare_means(comparisons = my_comparisons, paired = TRUE, color="black",size=5)+
+    theme_classic()+ 
+    theme(axis.text.x = element_text(size=14),axis.text.y = element_text(size=14)) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+    theme(legend.title = element_blank())+ 
+    theme(legend.position='none')+
+    theme(plot.title = element_text(hjust = 0.5))+
+    labs(y= "TLS value", x="")
+
+## sfig
+
+meta1$`Cytolytic Score` <- as.numeric(meta1$`Cytolytic Score`)
+pp1 <- ggplot(meta1, aes(x = TLS, y = log2(`Cytolytic Score`), color = id3)) +
+    geom_point(aes(group = id3),alpha=0.7)+
+    geom_smooth(aes(group = id3), size=2, method =lm )+ 
+    theme(axis.text.x =element_text(size=12), axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    scale_color_jama()+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="top")+
+    stat_cor(aes(group = id3), method = "spearman", color="black", size=6)+
+    theme_classic()+
+    labs(x= "TLS value", x="Cytolytic Score(log2)")
+
+meta1$`Mutation Load` <- as.numeric(meta1$`Mutation Load`)
+pp2 <-  ggplot(meta1, aes(x = TLS, y = log2(`Mutation Load`), color = id3)) +
+    geom_point(aes(group = id3),alpha=0.7)+
+    geom_smooth(aes(group = id3), size=2, method =lm )+ 
+    theme(axis.text.x =element_text(size=12), axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    scale_color_jama()+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="top")+
+    stat_cor(aes(group = id3), method = "spearman", color="black", size=6)+
+    theme_classic()+
+    labs(x= "TLS value", x="Mutation Load (log2)")
+ 
+ meta1$`Neo-antigen Load` <- as.numeric(meta1$`Neo-antigen Load`)
+pp3 <- ggplot(meta1, aes(x = TLS, y = log2(`Neo-antigen Load`), color = id3)) +
+    geom_point(aes(group = id3),alpha=0.7)+
+    geom_smooth(aes(group = id3), size=2, method =lm )+ 
+    theme(axis.text.x =element_text(size=12), axis.text.y = element_text(size=12)) +
+    theme(legend.title = element_blank())+ 
+    scale_color_jama()+
+    theme(title=element_text(size=14,color="#4F4F4F"))+
+    theme(legend.position="top")+
+    stat_cor(aes(group = id3), method = "spearman", color="black", size=6)+
+    theme_classic()+
+    labs(x= "TLS value", x="Neo-antigen Load (log2)")
+
+
+## GSE176307
+
+gene.176307 <- read.csv("D:/Bcells/ICB/GSE176307_BACI_log_trans_normalized_RNAseq.csv",header = T, sep = ',', row.names = 1, check.names=F)
+
+set.seed(001)
+gsva_matrix<- gsva(as.matrix(t(gene.176307 )), list,method='ssgsea',kcdf='Gaussian',abs.ranking=TRUE)
+
+meta.GSE176307<- read_excel("D:/Bcells/ICB/survival.xlsx", sheet = "GSE176307", col_names = TRUE)
+
+meta.GSE176307$TLS <- gsva_matrix["TLS", meta.GSE176307$id]
+meta.GSE176307$OS <- as.numeric(meta.GSE176307$OS)/30
+meta.GSE176307$status <- as.numeric(meta.GSE176307$status)
+
+## Anti-PD1 (Pembrolizumab)
+meta1 <- subset(meta.GSE176307, io == "Pembrolizumab")
+
+res.cut <- surv_cutpoint(meta1, 
+                         time = "OS", 
+                         event = "status", 
+                         variables = c("TLS") 
+)
+
+res.cat <- surv_categorize(res.cut)
+
+fit <- survfit(Surv(OS, status)~TLS, data=res.cat)
+
+ggsurvplot(fit, xlab = "Time(Months)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=7)
+
+
+## Atezolizumab
+meta1 <- subset(meta.GSE176307, io == "Atezolizumab")
+
+res.cut <- surv_cutpoint(meta1, 
+                         time = "OS", 
+                         event = "status", 
+                         variables = c("TLS") 
+)
+
+res.cat <- surv_categorize(res.cut)
+
+fit <- survfit(Surv(OS, status)~TLS, data=res.cat)
+
+ggsurvplot(fit, xlab = "Time(Weeks)",
+           pval = TRUE, conf.int = FALSE,
+           risk.table = TRUE,surv.scale="percent" ,
+           palette = c("#8a4048", "#26496d"),
+           break.x.by=7)
+
+```
